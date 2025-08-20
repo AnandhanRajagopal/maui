@@ -97,7 +97,8 @@ namespace Maui.Controls.Sample.Issues
 	{
 		public ICommand NavigateCommand { get; set; }
 
-		[UnconditionalSuppressMessage("Trimming", "IL2111:DynamicallyAccessedMembersAttribute", Justification = "Command parameter usage in test code")]
+		[UnconditionalSuppressMessage("TrimAnalysis", "IL2111", 
+			Justification = "The lambda expression in NavigateCommand is only used with known page types that have public parameterless constructors.")]
 		public Issue21112ViewModel()
 		{
 			NavigateCommand = new Command<Type>(async ([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type pageType) =>

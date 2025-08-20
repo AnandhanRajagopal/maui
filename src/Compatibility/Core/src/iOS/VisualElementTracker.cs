@@ -6,7 +6,6 @@ using CoreGraphics;
 using Microsoft.Maui.Controls.Internals;
 using Microsoft.Maui.Controls.Platform;
 using Microsoft.Maui.Graphics;
-using Microsoft.Maui.Dispatching;
 
 #if __MOBILE__
 using ObjCRuntime;
@@ -377,8 +376,6 @@ namespace Microsoft.Maui.Controls.Compatibility.Platform.MacOS
 		[PortHandler("Partially ported")]
 		void UpdateNativeControl()
 		{
-			Performance.Start(out string reference);
-
 			if (_disposed)
 				return;
 
@@ -400,7 +397,6 @@ namespace Microsoft.Maui.Controls.Compatibility.Platform.MacOS
 			UpdateClip();
 
 			NativeControlUpdated?.Invoke(this, EventArgs.Empty);
-			Performance.Stop(reference);
 		}
 
 		void UpdateClip()
