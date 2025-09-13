@@ -74,14 +74,14 @@ public partial class TestPage
 		stackLayout = new global::System.Lazy<global::Microsoft.Maui.Controls.StackLayout>(() => {
 			var stackLayout1 = new global::Microsoft.Maui.Controls.StackLayout();
 			global::Microsoft.Maui.VisualDiagnostics.RegisterSourceInfo(stackLayout1!, new global::System.Uri(@"Test.xaml;assembly=SourceGeneratorDriver.Generated", global::System.UriKind.Relative), 7, 4);
-#line 8 "Test.xaml"
-			((global::System.Collections.Generic.ICollection<global::Microsoft.Maui.IView>)stackLayout1.Children).Add((global::Microsoft.Maui.IView)button1);
+#line 8 "/Users/sde/Projects/Microsoft/maui/artifacts/bin/SourceGen.UnitTests/Debug/net10.0/Test.xaml"
+			((global::System.Collections.Generic.ICollection<global::Microsoft.Maui.IView>)stackLayout1.Children).Add((global::Microsoft.Maui.IView)button.Value);
 #line default
 			return stackLayout1;
 		});
 
 		this.SetValue(global::Microsoft.Maui.Controls.Page.TitleProperty, "Test Page");
-		this.SetValue(global::Microsoft.Maui.Controls.ContentPage.ContentProperty, stackLayout1);
+		this.SetValue(global::Microsoft.Maui.Controls.ContentPage.ContentProperty, stackLayout.Value);
 
 	}
 }

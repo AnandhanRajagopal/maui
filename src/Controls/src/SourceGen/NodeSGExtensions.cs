@@ -41,7 +41,7 @@ static class NodeSGExtensions
 	// Lazy enum converter
 	private static readonly Lazy<EnumConverter> _lazyEnumConverter = new(() => new EnumConverter());
 
-	private static string ConvertEnum(string value, BaseNode node, ITypeSymbol toType, SourceGenContext context, LocalVariable? parentVar = null) =>
+	private static string ConvertEnum(string value, BaseNode node, ITypeSymbol toType, SourceGenContext context, ILocalVariable? parentVar = null) =>
 		_lazyEnumConverter.Value.Convert(value, node, toType, context, parentVar);
 
 	static Dictionary<ITypeSymbol, (ConverterDelegate converter, ITypeSymbol returnType)> GetKnownSGTypeConverters(SourceGenContext context)
