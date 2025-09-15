@@ -247,11 +247,17 @@ static class SetPropertyHelpers
 		var pType = bpFieldSymbol.GetBPTypeAndConverter(context)?.type;
 		if (node is ValueNode valueNode)
 		{
-			var valueString = valueNode.ConvertTo(bpFieldSymbol, context, parentVar);
-			writer.WriteLine($"{parentVar.Name}.SetValue({bpFieldSymbol.ToFQDisplayString()}, {valueString});");
+			using (context.ProjectItem.EnableLineInfo ? PrePost.NewLineInfo(writer, (IXmlLineInfo)node, context.ProjectItem) : PrePost.NoBlock())
+			{
+				var valueString = valueNode.ConvertTo(bpFieldSymbol, context, parentVar);
+				writer.WriteLine($"{parentVar.Name}.SetValue({bpFieldSymbol.ToFQDisplayString()}, {valueString});");
+			}
 		}
 		else if (node is ElementNode elementNode)
-			writer.WriteLine($"{parentVar.Name}.SetValue({bpFieldSymbol.ToFQDisplayString()}, {(HasDoubleImplicitConversion(context.Variables[elementNode].Type, pType, context, out var conv) ? "(" + conv!.ReturnType.ToFQDisplayString() + ")" : string.Empty)}{context.Variables[node].Name});");
+			using (context.ProjectItem.EnableLineInfo ? PrePost.NewLineInfo(writer, (IXmlLineInfo)node, context.ProjectItem) : PrePost.NoBlock())
+			{
+				writer.WriteLine($"{parentVar.Name}.SetValue({bpFieldSymbol.ToFQDisplayString()}, {(HasDoubleImplicitConversion(context.Variables[elementNode].Type, pType, context, out var conv) ? "(" + conv!.ReturnType.ToFQDisplayString() + ")" : string.Empty)}{context.Variables[node].Name});");
+			}
 	}
 
 	static bool CanGet(ILocalVariable parentVar, string localName, SourceGenContext context, out ITypeSymbol? propertyType, out IPropertySymbol? propertySymbol)

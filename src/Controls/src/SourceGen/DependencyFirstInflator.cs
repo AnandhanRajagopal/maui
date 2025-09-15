@@ -1,6 +1,7 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -11,11 +12,9 @@ namespace Microsoft.Maui.Controls.SourceGen;
 
 class DependencyFirstInflator
 {
-	record LazyLocalVariable(string name, ITypeSymbol Type, ITypeSymbol? LazyType = null) : ILocalVariable
+	record InflatorProperty(ITypeSymbol Type, string name) : ILocalVariable
 	{
-		public bool IsLazy => LazyType != null;
-
-		public string Name => IsLazy ? $"{name}.Value" : name;
+		public string Name => $"inflator.{name}";
 	}
 
 	static readonly IList<XmlName> skips = [
@@ -31,46 +30,24 @@ class DependencyFirstInflator
 
 	public void Inflate(SourceGenContext context, IElementNode root, IndentedTextWriter writer)
 	{
-		Dictionary<IElementNode, LazyLocalVariable> deferredVariables = [];
-		var thisVar = new LazyLocalVariable("this", (INamedTypeSymbol)context.RootType);
+		var thisVar = new LocalVariable((INamedTypeSymbol)context.RootType, "this");
+		writer.WriteLine($"var inflator = new {context.RootType.Name}Inflator();");
 
-		//where we declare the lazies
-		var declarationWriter = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writer.Indent };
+		//set the properties on the root control, and create all the derred objects on the refstructwriter
+		var refStructWriter = context.RefStructWriter = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = 1 };
 
-		//where we create the lazies, and set he creator func
-		var assignmentWriters = new List<IndentedTextWriter>();
+		SetValuesForNode(root, (writer, refStructWriter), thisVar, context);
 
-		var setXNamesWriter = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writer.Indent };
-
-		//where we set the values on the current object
-		var setValueWriter = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writer.Indent };
-
-		//collects all the variables to create, collect declaration, assignment, and usage
-		//if it needs to creates lazy variables, it will declare them on the declarationWriter, and assign them on a new assignmentWriter
-		SetValuesForNode(root, (declarationWriter, assignmentWriters, setValueWriter, writer.Indent), thisVar, context, deferredVariables);
-
-		//write declarations
-		writer.Append(declarationWriter, noTabs: true);
-
-		//write the SetXName calls
-		writer.Append(setXNamesWriter, noTabs: true);
-
-		//write the assignments
-		foreach (var assignmentWriter in assignmentWriters)
-			writer.Append(assignmentWriter, noTabs: true);
-
-		//write the SetValue calls
-		writer.Append(setValueWriter, noTabs: true);
 	}
 
-	void SetValuesForNode(IElementNode node, (IndentedTextWriter Declaration, IList<IndentedTextWriter> Assignments, IndentedTextWriter SetValue, int Indent) writers, ILocalVariable parentVar, SourceGenContext context, Dictionary<IElementNode, LazyLocalVariable> deferredVariables)
+	void SetValuesForNode(IElementNode node, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
 	{
 		foreach (var prop in node.Properties)
 		{
 			if (skips.Contains(prop.Key))
 				continue;
 
-			SetPropertyValue(prop, writers, parentVar, context, deferredVariables);
+			SetPropertyValue(prop, writers, parentVar, context);
 		}
 
 		var contentPropertyName = node.XmlType.GetTypeSymbol(context.ReportDiagnostic, context.Compilation, context.XmlnsCache)?.GetContentPropertyName(context);
@@ -79,13 +56,12 @@ class DependencyFirstInflator
 			foreach (var child in node.CollectionItems)
 			{
 				var prop = new KeyValuePair<XmlName, INode>(new XmlName(null, contentPropertyName), child);
-
-				SetPropertyValue(prop, writers, parentVar, context, deferredVariables);
+				SetPropertyValue(prop, writers, parentVar, context);
 			}
 		}
 	}
 
-	void SetPropertyValue(KeyValuePair<XmlName, INode> prop, (IndentedTextWriter Declaration, IList<IndentedTextWriter> Assignments, IndentedTextWriter SetValue, int Indent) writers, ILocalVariable parentVar, SourceGenContext context, Dictionary<IElementNode, LazyLocalVariable> deferredVariables)
+	void SetPropertyValue(KeyValuePair<XmlName, INode> prop, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
 	{
 		if (!CanBeSetDirectly(prop, context))
 		{
@@ -93,26 +69,65 @@ class DependencyFirstInflator
 				throw new NotImplementedException();
 			if (elementNode.XmlType.GetTypeSymbol(context.ReportDiagnostic, context.Compilation, context.XmlnsCache) is not INamedTypeSymbol type)
 				throw new NotImplementedException();
-			var name = NamingHelpers.CreateUniqueVariableName(context, type!);
-			var localVariable = new LazyLocalVariable(name, type!, context.Compilation.GetTypeByMetadataName("System.Lazy`1")!.Construct(type!));
-			context.Variables.Add(elementNode, localVariable);
-			deferredVariables.Add(elementNode, localVariable);
 
-			writers.Declaration.WriteLine($"{localVariable.LazyType!.ToFQDisplayString()} {name};");
+			//let's create this code
+			//
+			// 	public global::Microsoft.Maui.Controls.Button Button  {
+			// 		get {
+			//	 		if (field != null)
+			// 				return field;
+			// 			field = Create(this);
+			// 			SetProperties(this);
+			// 			return field;
 
-			var writer = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writers.Indent };
-			using (PrePost.NewBlock(writer, $"{name} = new {localVariable.LazyType!.ToFQDisplayString()}(() => {{", "});"))
+			// 			static global::Microsoft.Maui.Controls.Button Create(TestPageInflator inflator) {
+			// 				var local = new global::Microsoft.Maui.Controls.Button();
+			// 				global::Microsoft.Maui.VisualDiagnostics.RegisterSourceInfo(local!, new global::System.Uri(@"Test.xaml;assembly=SourceGeneratorDriver.Generated", global::System.UriKind.Relative), 8, 5);
+			// 				return local;
+			// 			}
+
+			// 			static void SetProperties(Button @field, TestPageInflator inflator) {
+			// 				@field.SetValue(global::Microsoft.Maui.Controls.Button.TextProperty, "Hello MAUI!");
+			// 			}
+			//		}
+			// }
+
+			var property = new InflatorProperty(type, NamingHelpers.CreateUniqueVariableName(context, type));
+			context.Variables.Add(elementNode, property);
+
+			//create one write per property, to flush them at once
+			var writer = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writers.PropertiesWriter.Indent };
+
+			using (PrePost.NewBlock(writer, $"public {type.ToFQDisplayString()} {property.name}  {{", "}"))
+			using (PrePost.NewBlock(writer, "get {", "}"))
 			{
-				CreateValuesVisitor.CreateValue((ElementNode)elementNode, writer, context.Variables, context.Compilation, context.XmlnsCache, context);
-				var localVar = context.Variables[elementNode];
+				writer.WriteLine($"if (field != null)");
+				writer.Indent++;
+				writer.WriteLine($"return field;");
+				writer.Indent--;
+				writer.WriteLine($"field = Create(this);");
+				writer.WriteLine($"SetProperties(field, this);");
+				writer.WriteLine($"return field;");
+				writer.WriteLine();
 
-				//set properties of the created object
-				SetValuesForNode(elementNode, (writers.Declaration, writers.Assignments, writer, writers.Indent), localVar, context, deferredVariables);
-				writer.WriteLine($"return {localVar.Name};");
+				using (PrePost.NewBlock(writer, $"static {type.ToFQDisplayString()} Create({context.RootType.Name}Inflator inflator) {{", "}"))
+				{
+					CreateValuesVisitor.CreateValue((ElementNode)elementNode, writer, context.Variables, context.Compilation, context.XmlnsCache, context);
+					var localVar = context.Variables[elementNode];
+					writer.WriteLine($"return {localVar.Name};");
+				}
+				context.Variables[elementNode] = property; //replace the variable with the property
+				writer.WriteLine();
+
+				using (PrePost.NewBlock(writer, $"static void SetProperties({type.ToFQDisplayString()} @field, {context.RootType.Name}Inflator inflator) {{", "}"))
+				{
+					//replace the variable with a local var, to avoid using the property accessor
+					var localVar = context.Variables[elementNode];
+					SetValuesForNode(elementNode, (writer, writers.PropertiesWriter), context.Variables[elementNode] = new LocalVariable(type, "@field"), context);
+					context.Variables[elementNode] = localVar;
+				}
 			}
-			writers.Assignments.Add(writer);
-			//localVar is no longer in scope, replace it with localVariable
-			context.Variables[elementNode] = localVariable;
+			writers.PropertiesWriter.Append(writer, noTabs: true);
 		}
 		SetPropertyHelpers.SetPropertyValue(writers.SetValue, parentVar, prop.Key, prop.Value, context);
 

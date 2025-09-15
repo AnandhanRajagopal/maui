@@ -80,20 +80,20 @@ static class InitializeComponentCodeWriter
 			codeWriter.WriteLine();
 			if (!rootType.Name.StartsWith("__Type"))
 				codeWriter.WriteLine(GeneratedCodeAttribute);
+			xamlItem.Root!.XmlType.TryResolveTypeSymbol(null, compilation, xmlnsCache, out var baseType);
 			codeWriter.WriteLine($"{accessModifier} partial class {rootType.Name}");
+			var sgcontext = new SourceGenContext(codeWriter, compilation, sourceProductionContext, xmlnsCache, typeCache, rootType!, baseType, xamlItem.ProjectItem);
 			using (newblock())
 			{
 				var methodName = genSwitch ? "InitializeComponentSourceGen" : "InitializeComponent";
 				codeWriter.WriteLine($"private partial void {methodName}()");
-				xamlItem.Root!.XmlType.TryResolveTypeSymbol(null, compilation, xmlnsCache, out var baseType);
-				var sgcontext = new SourceGenContext(codeWriter, compilation, sourceProductionContext, xmlnsCache, typeCache, rootType!, baseType, xamlItem.ProjectItem);
 				if (xamlItem.ProjectItem.TreeOrder)
 				{
 
 					using (newblock())
 					{
 
-						VisitForDependenchOrder(root, sgcontext);
+						VisitForDependencyOrder(root, sgcontext);
 						new DependencyFirstInflator().Inflate(sgcontext, root, codeWriter);
 					}
 				}
@@ -110,14 +110,19 @@ static class InitializeComponentCodeWriter
 							codeWriter.WriteLine();
 						}
 					}
-
-					foreach (var writer in sgcontext.AddtitionalWriters)
-					{
-						codeWriter.Write(writer.ToString());
-						codeWriter.WriteLine();
-					}
 				}
 			}
+
+			if (sgcontext.RefStructWriter != null)
+			{
+				codeWriter.WriteLine();
+				using (PrePost.NewBlock(codeWriter, $"file ref struct {rootType.Name}Inflator {{", "}"))
+				{
+					codeWriter.Append(sgcontext.RefStructWriter, noTabs: true);
+				}
+			}
+
+
 		exit:
 			codeWriter.Flush();
 			return codeWriter.InnerWriter.ToString();
@@ -142,7 +147,7 @@ static class InitializeComponentCodeWriter
 		rootnode.Accept(new SetPropertiesVisitor(visitorContext, true), null);
 	}
 	
-	static void VisitForDependenchOrder(RootNode rootnode, SourceGenContext visitorContext)
+	static void VisitForDependencyOrder(RootNode rootnode, SourceGenContext visitorContext)
 	{
 		rootnode.Accept(new XamlNodeVisitor((node, parent) => node.Parent = parent), null); //set parents for {StaticResource}
 		rootnode.Accept(new ExpandMarkupsVisitor(visitorContext), null);
