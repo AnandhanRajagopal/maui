@@ -103,7 +103,6 @@ class DependencyFirstInflator
 			var writer = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = writers.Indent };
 			using (PrePost.NewBlock(writer, $"{name} = new {localVariable.LazyType!.ToFQDisplayString()}(() => {{", "});"))
 			{
-
 				CreateValuesVisitor.CreateValue((ElementNode)elementNode, writer, context.Variables, context.Compilation, context.XmlnsCache, context);
 				var localVar = context.Variables[elementNode];
 
@@ -112,6 +111,8 @@ class DependencyFirstInflator
 				writer.WriteLine($"return {localVar.Name};");
 			}
 			writers.Assignments.Add(writer);
+			//localVar is no longer in scope, replace it with localVariable
+			context.Variables[elementNode] = localVariable;
 		}
 		SetPropertyHelpers.SetPropertyValue(writers.SetValue, parentVar, prop.Key, prop.Value, context);
 
