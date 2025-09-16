@@ -1,12 +1,12 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.Maui.Controls.Xaml;
+
+using static Microsoft.Maui.Controls.SourceGen.GeneratorHelpers;
 
 namespace Microsoft.Maui.Controls.SourceGen;
 
@@ -35,19 +35,27 @@ class DependencyFirstInflator
 
 		//set the properties on the root control, and create all the derred objects on the refstructwriter
 		var refStructWriter = context.RefStructWriter = new IndentedTextWriter(new StringWriter(CultureInfo.InvariantCulture), "\t") { Indent = 1 };
-
-		SetValuesForNode(root, (writer, refStructWriter), thisVar, context);
-
+		Dictionary<ElementNode, string> xNameElements = [];
+		SetValuesForNode(root, (writer, refStructWriter), thisVar, context, xNameElements);
+		foreach (var kvp in xNameElements)
+		{
+			writer.WriteLine($"{thisVar.Name}.{EscapeIdentifier(kvp.Value)} = {context.Variables[kvp.Key].Name};");
+		}
 	}
 
-	void SetValuesForNode(ElementNode node, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
+	void SetValuesForNode(ElementNode node, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context, Dictionary<ElementNode, string> xNameElements)
 	{
 		foreach (var prop in node.Properties)
 		{
+			if (prop.Key == XmlName.xName && prop.Value is ValueNode valueNode && valueNode.Value is string xName)
+			{
+				xNameElements[node] = xName;
+				continue;
+			}
 			if (skips.Contains(prop.Key))
 				continue;
 
-			SetPropertyValue(prop, writers, parentVar, context);
+			SetPropertyValue(prop, writers, parentVar, context, xNameElements);
 		}
 
 		var contentPropertyName = node.XmlType.GetTypeSymbol(context.ReportDiagnostic, context.Compilation, context.XmlnsCache)?.GetContentPropertyName(context);
@@ -56,12 +64,12 @@ class DependencyFirstInflator
 			foreach (var child in node.CollectionItems)
 			{
 				var prop = new KeyValuePair<XmlName, INode>(new XmlName(null, contentPropertyName), child);
-				SetPropertyValue(prop, writers, parentVar, context);
+				SetPropertyValue(prop, writers, parentVar, context, xNameElements);
 			}
 		}
 	}
 
-	void SetPropertyValue(KeyValuePair<XmlName, INode> prop, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
+	void SetPropertyValue(KeyValuePair<XmlName, INode> prop, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context, Dictionary<ElementNode, string> xNameElements)
 	{
 		if (!CanBeSetDirectly(prop, context))
 		{
@@ -123,7 +131,7 @@ class DependencyFirstInflator
 				{
 					//replace the variable with a local var, to avoid using the property accessor
 					var localVar = context.Variables[elementNode];
-					SetValuesForNode(elementNode, (writer, writers.PropertiesWriter), context.Variables[elementNode] = new LocalVariable(type, "@field"), context);
+					SetValuesForNode(elementNode, (writer, writers.PropertiesWriter), context.Variables[elementNode] = new LocalVariable(type, "@field"), context, xNameElements);
 					context.Variables[elementNode] = localVar;
 				}
 			}
