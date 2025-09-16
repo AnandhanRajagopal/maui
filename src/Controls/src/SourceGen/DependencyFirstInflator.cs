@@ -130,7 +130,6 @@ class DependencyFirstInflator
 			writers.PropertiesWriter.Append(writer, noTabs: true);
 		}
 		SetPropertyHelpers.SetPropertyValue(writers.SetValue, parentVar, prop.Key, prop.Value, context);
-
 	}
 
 	bool CanBeSetDirectly(KeyValuePair<XmlName, INode> prop, SourceGenContext context)

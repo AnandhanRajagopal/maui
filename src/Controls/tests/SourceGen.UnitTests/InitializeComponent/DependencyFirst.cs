@@ -70,6 +70,7 @@ public partial class TestPage
 #line 7 "{{testXamlFilePath}}"
 		this.SetValue(global::Microsoft.Maui.Controls.ContentPage.ContentProperty, inflator.stackLayout);
 #line default
+		this.MyButton = inflator.button;
 	}
 }
 
@@ -89,7 +90,7 @@ file ref struct TestPageInflator {
 			}
 			
 			static void SetProperties(global::Microsoft.Maui.Controls.Button @field, TestPageInflator inflator) {
-#line 8 "/Users/sde/Projects/Microsoft/maui/artifacts/bin/SourceGen.UnitTests/Debug/net10.0/Test.xaml"
+#line 8 "{{testXamlFilePath}}"
 				@field.SetValue(global::Microsoft.Maui.Controls.Button.TextProperty, "Hello MAUI!");
 #line default
 			}
