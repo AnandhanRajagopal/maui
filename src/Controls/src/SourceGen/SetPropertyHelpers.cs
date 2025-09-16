@@ -68,7 +68,7 @@ static class SetPropertyHelpers
 		context.ReportDiagnostic(Diagnostic.Create(Descriptors.MemberResolution, location, localName));
 	}
 
-	public static bool CanAddToResourceDictionary(ILocalVariable parentVar, ITypeSymbol collectionType, IElementNode node, SourceGenContext context)
+	public static bool CanAddToResourceDictionary(ILocalVariable parentVar, ITypeSymbol collectionType, ElementNode node, SourceGenContext context)
 	{
 		if (!collectionType.InheritsFrom(context.Compilation.GetTypeByMetadataName("Microsoft.Maui.Controls.ResourceDictionary")!, context))
 			return false;
@@ -115,7 +115,7 @@ static class SetPropertyHelpers
 			return "null";
 	}
 
-	public static void AddToResourceDictionary(IndentedTextWriter writer, ILocalVariable parentVar, IElementNode node, SourceGenContext context)
+	public static void AddToResourceDictionary(IndentedTextWriter writer, ILocalVariable parentVar, ElementNode node, SourceGenContext context)
 	{
 		if (node.Properties.TryGetValue(XmlName.xKey, out var keyNode))
 		{
@@ -137,7 +137,7 @@ static class SetPropertyHelpers
 			return false;
 		if (node is ValueNode vn && vn.CanConvertTo(property, context))
 			return true;
-		if (node is not IElementNode elementNode)
+		if (node is not ElementNode elementNode)
 			return false;
 		if (!context.Variables.TryGetValue(elementNode, out var localVar))
 			return false;
@@ -166,7 +166,7 @@ static class SetPropertyHelpers
 	{
 		if (bpFieldSymbol == null)
 			return false;
-		if (node is not IElementNode en)
+		if (node is not ElementNode en)
 			return false;
 
 		//TODO we could get the type directly from the XmlType of the node, so no need to instantiate de extension at all
@@ -177,7 +177,7 @@ static class SetPropertyHelpers
 	}
 
 	static void SetDynamicResource(IndentedTextWriter writer, ILocalVariable parentVar, IFieldSymbol fieldSymbol, INode valueNode, SourceGenContext context)
-		=> writer.WriteLine($"{parentVar.Name}.SetDynamicResource({fieldSymbol.ToFQDisplayString()}, {context.Variables[(IElementNode)valueNode].Name}.Key);");
+		=> writer.WriteLine($"{parentVar.Name}.SetDynamicResource({fieldSymbol.ToFQDisplayString()}, {context.Variables[(ElementNode)valueNode].Name}.Key);");
 
 	static bool CanConnectEvent(ILocalVariable parentVar, string localName, INode valueNode, bool attached, SourceGenContext context)
 		//FIXME check event signature
@@ -390,11 +390,11 @@ static class SetPropertyHelpers
 		//one of those will return true, but we need the propertyType
 		_ = CanGetValue(parentVar, bpFieldSymbol, attached, context, out var propertyType) || CanGet(parentVar, localName, context, out propertyType, out propertySymbol);
 
-		if (CanAddToResourceDictionary(parentVar, propertyType!, (IElementNode)valueNode, context))
+		if (CanAddToResourceDictionary(parentVar, propertyType!, (ElementNode)valueNode, context))
 		{
 			var rdVar = new LocalVariable(propertyType!, NamingHelpers.CreateUniqueVariableName(context, propertyType!));
 			writer.WriteLine($"var {rdVar.Name} = {GetOrGetValue(parentVar, bpFieldSymbol, propertySymbol, valueNode, context)};");
-			AddToResourceDictionary(writer, rdVar, (IElementNode)valueNode, context);
+			AddToResourceDictionary(writer, rdVar, (ElementNode)valueNode, context);
 			return;
 		}
 

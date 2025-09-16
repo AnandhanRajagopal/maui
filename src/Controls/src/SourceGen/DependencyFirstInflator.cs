@@ -28,7 +28,7 @@ class DependencyFirstInflator
 		XmlName.xTypeArguments,
 	];
 
-	public void Inflate(SourceGenContext context, IElementNode root, IndentedTextWriter writer)
+	public void Inflate(SourceGenContext context, ElementNode root, IndentedTextWriter writer)
 	{
 		var thisVar = new LocalVariable((INamedTypeSymbol)context.RootType, "this");
 		writer.WriteLine($"var inflator = new {context.RootType.Name}Inflator();");
@@ -40,7 +40,7 @@ class DependencyFirstInflator
 
 	}
 
-	void SetValuesForNode(IElementNode node, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
+	void SetValuesForNode(ElementNode node, (IndentedTextWriter SetValue, IndentedTextWriter PropertiesWriter) writers, ILocalVariable parentVar, SourceGenContext context)
 	{
 		foreach (var prop in node.Properties)
 		{
@@ -65,7 +65,7 @@ class DependencyFirstInflator
 	{
 		if (!CanBeSetDirectly(prop, context))
 		{
-			if (prop.Value is not IElementNode elementNode)
+			if (prop.Value is not ElementNode elementNode)
 				throw new NotImplementedException();
 			if (elementNode.XmlType.GetTypeSymbol(context.ReportDiagnostic, context.Compilation, context.XmlnsCache) is not INamedTypeSymbol type)
 				throw new NotImplementedException();
